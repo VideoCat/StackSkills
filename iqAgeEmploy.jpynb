@@ -1,0 +1,155 @@
+import tensorflow as tf
+import numpy as np
+import pandas as pd
+from pandas import DataFrame as df
+
+
+#create dataset
+np.random.seed(725)  # set random seed
+X1 = np.random.normal(100, 15, 200).astype(int)   # X1 is IQ variable, generate 200 values with mean of 100 and standard deviation of 15 - as integers
+X2 = np.random.normal(10, 4.5, 200)              # X2 is years of experience, generate 200 values with a mean of 10 and standard deviation of 4.5 - as float
+X3 = np.random.normal(32, 4, 200).astype(int)   # X3 is Age, generate 200 values with a mean of 32 and stadard deviation of 4 - as integer
+dob = np.datetime64('2011-07-04') - 365*X3             # dob is date of bith, calculate based on havng collected the data on 1/1/2021 - reference point 
+b = 5                                               # intercept since linear
+er = np.random.normal(0, 1.5, 200)                  # noise as error. real life would not be perfect, there would be some error -  
+
+Y = np.array([0.3*x1 + 1.5*x2 + 0.83*x3 + b + e for x1,x2,x3,e in zip(X1,X2,X3,er) ])   # define parameters that will be inferred - list comprehension (lower case) true values for model that we are 
+# using to learn (upper case) for actual use in calculations
+
+
+#Cleaning - panda DataFrame
+# negative age is not good
+cols = ['iq','years_experience','dob' ]             # pass to datafrome constructor - 
+df = df(list(zip(X1,X2,dob)), columns=cols)       # call the list outside of zip which is a generator - 
+df['income'] = Y                                  # income - Y value
+df.info()
+
+
+df.describe()
+
+
+df = df[df.years_experience >= 0]         # dataframes only for >= zero
+df.describe()
+
+
+df.describe(include=['datetime64'])         # add the dob with include argument
+
+
+import matplotlib.pyplot as plt
+%matplotlib inline
+pd.plotting.scatter_matrix(df, figsize=(16,9));
+
+
+import seaborn as sns
+plt.figure(figsize=(12,9))
+sns.heatmap(df.corr());
+
+
+from datetime import datetime as dt
+
+df['age'] = df.dob.apply(lambda x: (dt.strptime('2021-01-01', '%Y-%m-%d') - x).days/365)
+
+df.drop('dob', axis=1, inplace=True)        # drop dob from view, not needed
+
+
+df.head()
+
+
+import tensorflow as tf
+
+
+# train/test split
+X = df.iloc[:, [0, 1, 3]]   # use only columns 0, 1, 3 which are iq, Years_experience, age
+Y = df.income                 # Y uses income only, was originally entered as age to needed to be corrected and started running all over again.
+
+tr_idx = X.sample(frac=0.67).index       # index the sample by fraction of 0.67 
+Xtr = X[X.index.isin(tr_idx)].values
+Xts = X[~X.index.isin(tr_idx)].values    
+
+Ytr = Y[Y.index.isin(tr_idx)].values
+Yts = Y[~Y.index.isin(tr_idx)].values
+
+
+
+import tensorflow as tf
+
+tf.compat.v1.disable_eager_execution()
+
+tf.compat.v1.placeholder(dtype=float, name=None)
+
+
+sess = tf.compat.v1.Session()
+
+#create parameters
+w = tf.compat.v1.get_variable(name='w', initializer=[[0.1], [0.1], [0.1]])
+b = tf.compat.v1.get_variable(name='b', initializer=0.)
+
+
+
+#create input placeholders
+x = tf.compat.v1.placeholder('float32', name='x')
+y = tf.compat.v1.placeholder('float32', name='y_true')
+
+#create linear model
+yhat = tf.reshape(tf.matmul(x,w) + b, [-1,], name='yhat')
+
+
+# tf.compat.v1.reset_default_graph()  # this should not be needed
+
+
+
+mse = tf.reduce_mean(tf.square(y - yhat), name='mse')
+rmse = tf.sqrt(mse, name='rmse')
+# root mean square as a loss function - simplified compared to the previous
+# previously created se, mse, then rmse - this time only mse and rsme
+# test score
+
+test_nrmse = tf.divide(rmse, tf.abs(tf.reduce_mean(y)), name='nrmse')
+# nomalized root mean squared error - helps to understand the scale of things
+# iq, years_experience, and age
+# normalizing by dividing rsme by the absolute value of the mean of y 
+
+
+
+# init vars
+
+init = tf.compat.v1.variables_initializer([w, b])  # initialize variables and run the initialization 
+# sess.run(init)
+
+
+# reset parameters w and b
+sess.run(init)
+
+# run optimization again with smaller learning rate
+opt = tf.compat.v1.train.GradientDescentOptimizer(learning_rate=0.0001) # learning rate is chaned from 0.01
+# OK to play around with that rate to see what happens - Using GradientDescentOptimizer
+
+tf.executing_eagerly()
+
+# train = opt.compute_gradients(test_nrmse, rmse)
+# opt.apply_gradients(rmse)
+
+
+
+train = opt.minimize(rmse)  # train function that is being used in in the if part of the for loop below
+
+for i in range(800):
+  if(i%50 == 0) & (i > 0):
+    nrmse = sess.run(test_nrmse, {x: Xts, y: Yts})
+    print('test NRMSE: {}'.format(nrmse))
+  else:
+    sess.run(train, {x: Xtr, y: Ytr})
+
+  
+
+# 0.3*x1 = 1.5*x2 + 0.83*x3 + 5
+
+
+
+sess.run([w,b])
+
+
+
+
+
+
